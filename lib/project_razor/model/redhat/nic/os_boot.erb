@@ -1,0 +1,25 @@
+#!/bin/bash
+
+yum -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm
+[ "$?" -eq 0 ] && curl <%= callback_url("postinstall", "yum_puppet_repo_ok") %> || curl <%= callback_url("postinstall", "yum_puppet_repo_fail") %>
+
+yum -y update
+[ "$?" -eq 0 ] && curl <%= callback_url("postinstall", "yum_update_ok") %> || curl <%= callback_url("postinstall", "yum_update_fail") %>
+
+yum -y install facter puppet
+[ "$?" -eq 0 ] && curl <%= callback_url("postinstall", "yum_install_ok") %> || curl <%= callback_url("postinstall", "yum_install_fail") %>
+
+# Set up hostname
+echo $(facter ipaddress) $(facter fqdn) $(facter hostname) >> /etc/hosts
+
+# Set up connection to puppet server
+echo server=nic-hadoop-puppet.nearinfinity.com >> /etc/puppet/puppet.conf
+
+# Send IP to Razor
+curl <%= callback_url("postinstall", "send_ips") %>/$(facter ipaddress)
+
+# Get final script
+curl <%= callback_url("postinstall", "boot") %> | sh
+
+# Send final state
+curl <%= callback_url("postinstall", "final") %> &

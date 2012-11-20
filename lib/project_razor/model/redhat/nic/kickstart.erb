@@ -1,0 +1,50 @@
+#!/bin/bash
+# Kickstart for NIC Hadoop Cluster RHEL/CentOS 6
+# see: http://docs.redhat.com/docs/en-US/Red_Hat_Enterprise_Linux/6/html/Installation_Guide/s1-kickstart2-options.html
+
+install
+url --url=http://<%= config.image_svc_host %>:<%= config.image_svc_port %>/razor/image/os/<%= @image_uuid %>
+text
+lang en_US.UTF-8
+keyboard us
+rootpw <%= @root_password %>
+network --hostname <%= hostname %>.<%= domainname %>
+firewall --service=ssh
+authconfig --enableshadow --passalgo=sha512 --enablefingerprint
+selinux --disabled
+timezone --utc America/New_York
+
+## Partitioning
+zerombr
+clearpart --all --initlabel
+bootloader --location=mbr --driveorder=sda --append=crashkernel=auto rhgb quiet
+%include /tmp/part-include # See %pre section below
+
+# reboot automatically
+reboot
+
+# followig is MINIMAL https://partner-bugzilla.redhat.com/show_bug.cgi?id=593309
+%packages --nobase
+@core
+
+%end
+
+%pre
+set $(list-harddrives)
+n=$#/2 # number of disks
+
+echo "part / --asprimary --size=10000 --grow --ondisk=${1} --fstype=ext4 --label=\"disk1\"" > /tmp/part-include
+for ((i=1; i < $n; i++))
+do
+  dev=$((i * 2 + 1))
+  echo "part /data$((i+1)) --size=1000 --grow --ondisk=${!dev} --fstype=ext4 --label=\"disk$i\"" >> /tmp/part-include
+done
+%end
+
+%post --log=/root/razor-post.log
+mkdir /data1
+curl -v <%= api_svc_uri %>/policy/callback/<%= policy_uuid %>/kickstart/end
+curl -v <%= api_svc_uri %>/policy/callback/<%= policy_uuid %>/postinstall/inject -o /tmp/razor_postinstall.sh
+echo bash /tmp/razor_postinstall.sh >> /etc/rc.local
+chmod +x /tmp/razor_postinstall.sh
+%end
